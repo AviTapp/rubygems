@@ -100,6 +100,11 @@ task :clean_env do
   ENV.delete "GEM_PATH"
 end
 
+desc "Install gems needed to run the tests"
+task :install_test_deps => :clean_env do
+  sh "gem install minitest -v '~> 4.0'"
+end
+
 task :test => :clean_env
 
 # --------------------------------------------------------------------
@@ -344,7 +349,7 @@ def diff_with dir
   sh "diff #{diff_options} lib/rubygems.rb     #{dir}/lib/rubygems.rb; true"
   sh "diff #{diff_options} lib/rubygems        #{dir}/lib/rubygems;    true"
   sh "diff #{diff_options} lib/rbconfig        #{dir}/lib/rbconfig;    true"
-  sh "diff #{diff_options} test                #{dir}/test/rubygems;   true"
+  sh "diff #{diff_options} test/rubygems       #{dir}/test/rubygems;   true"
 end
 
 rubinius_dir = ENV['RUBINIUS_PATH'] || '../git.rubini.us/code'

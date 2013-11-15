@@ -108,6 +108,11 @@ class Gem::RequestSet::GemDependencyAPI
   }
 
   ##
+  # A set of gems that are loaded via the +:git+ option to #gem
+
+  attr_reader :git_set # :nodoc:
+
+  ##
   # A Hash containing gem names and files to require from those gems.
 
   attr_reader :requires
@@ -130,12 +135,55 @@ class Gem::RequestSet::GemDependencyAPI
     @set = set
     @path = path
 
-    @current_groups   = nil
-    @current_platform = nil
-    @default_sources  = true
-    @requires         = Hash.new { |h, name|  h[name]  = [] }
-    @vendor_set       = @set.vendor_set
-    @without_groups   = []
+    @current_groups     = nil
+    @current_platform   = nil
+    @current_repository = nil
+    @default_sources    = true
+    @git_set            = @set.git_set
+    @requires           = Hash.new { |h, name| h[name] = [] }
+    @vendor_set         = @set.vendor_set
+    @gem_sources        = {}
+    @without_groups     = []
+  end
+
+  ##
+  # Adds +dependencies+ to the request set if any of the +groups+ are allowed.
+  # This is used for gemspec dependencies.
+
+  def add_dependencies groups, dependencies # :nodoc:
+    return unless (groups & @without_groups).empty?
+
+    dependencies.each do |dep|
+      @set.gem dep.name, *dep.requirement
+    end
+  end
+
+  private :add_dependencies
+
+  ##
+  # Finds a gemspec with the given +name+ that lives at +path+.
+
+  def find_gemspec name, path # :nodoc:
+    glob = File.join path, "#{name}.gemspec"
+
+    spec_files = Dir[glob]
+
+    case spec_files.length
+    when 1 then
+      spec_file = spec_files.first
+
+      spec = Gem::Specification.load spec_file
+
+      return spec if spec
+
+      raise ArgumentError, "invalid gemspec #{spec_file}"
+    when 0 then
+      raise ArgumentError, "no gemspecs found at #{Dir.pwd}"
+    else
+      raise ArgumentError,
+        "found multiple gemspecs at #{Dir.pwd}, " +
+        "use the name: option to specify the one you want"
+    end
   end
 
   ##
@@ -159,7 +207,13 @@ class Gem::RequestSet::GemDependencyAPI
     options = requirements.pop if requirements.last.kind_of?(Hash)
     options ||= {}
 
-    gem_path name, options
+    options[:git] = @current_repository if @current_repository
+
+    source_set = false
+
+    source_set ||= gem_path   name, options
+    source_set ||= gem_git    name, options
+    source_set ||= gem_github name, options
 
     return unless gem_platforms options
 
@@ -167,9 +221,65 @@ class Gem::RequestSet::GemDependencyAPI
 
     return unless (groups & @without_groups).empty?
 
+    unless source_set then
+      raise ArgumentError,
+        "duplicate source (default) for gem #{name}" if
+          @gem_sources.include? name
+
+      @gem_sources[name] = :default
+    end
+
     gem_requires name, options
 
     @set.gem name, *requirements
+  end
+
+  ##
+  # Handles the git: option from +options+ for gem +name+.
+  #
+  # Returns +true+ if the path option was handled.
+
+  def gem_git name, options # :nodoc:
+    if gist = options.delete(:gist) then
+      options[:git] = "https://gist.github.com/#{gist}.git"
+    end
+
+    return unless repository = options.delete(:git)
+
+    raise ArgumentError,
+      "duplicate source git: #{repository} for gem #{name}" if
+        @gem_sources.include? name
+
+    reference = nil
+    reference ||= options.delete :ref
+    reference ||= options.delete :branch
+    reference ||= options.delete :tag
+    reference ||= 'master'
+
+    submodules = options.delete :submodules
+
+    @git_set.add_git_gem name, repository, reference, submodules
+
+    @gem_sources[name] = repository
+
+    true
+  end
+
+  private :gem_git
+
+  ##
+  # Handles the github: option from +options+ for gem +name+.
+  #
+  # Returns +true+ if the path option was handled.
+
+  def gem_github name, options # :nodoc:
+    return unless path = options.delete(:github)
+
+    options[:git] = "git://github.com/#{path}.git"
+
+    gem_git name, options
+
+    true
   end
 
   ##
@@ -192,11 +302,21 @@ class Gem::RequestSet::GemDependencyAPI
 
   ##
   # Handles the path: option from +options+ for gem +name+.
+  #
+  # Returns +true+ if the path option was handled.
 
   def gem_path name, options # :nodoc:
-    if directory = options.delete(:path) then
-      @vendor_set.add_vendor_gem name, directory
-    end
+    return unless directory = options.delete(:path)
+
+    raise ArgumentError,
+      "duplicate source path: #{directory} for gem #{name}" if
+        @gem_sources.include? name
+
+    @vendor_set.add_vendor_gem name, directory
+
+    @gem_sources[name] = directory
+
+    true
   end
 
   private :gem_path
@@ -250,11 +370,43 @@ class Gem::RequestSet::GemDependencyAPI
 
   private :gem_requires
 
+  def git repository
+    @current_repository = repository
+
+    yield
+
+  ensure
+    @current_repository = nil
+  end
+
   ##
   # Returns the basename of the file the dependencies were loaded from
 
   def gem_deps_file # :nodoc:
     File.basename @path
+  end
+
+  ##
+  # :category: Gem Dependencies DSL
+  #
+  # Loads dependencies from a gemspec file.
+
+  def gemspec options = {}
+    name              = options.delete(:name) || '{,*}'
+    path              = options.delete(:path) || '.'
+    development_group = options.delete(:development_group) || :development
+
+    spec = find_gemspec name, path
+
+    groups = gem_group spec.name, {}
+
+    add_dependencies groups, spec.runtime_dependencies
+
+    groups << development_group
+
+    add_dependencies groups, spec.development_dependencies
+
+    gem_requires spec.name, options
   end
 
   ##
@@ -344,7 +496,7 @@ class Gem::RequestSet::GemDependencyAPI
 
   # TODO: remove this typo name at RubyGems 3.0
 
-  Gem::RequestSet::DepedencyAPI = self # :nodoc:
+  Gem::RequestSet::GemDepedencyAPI = self # :nodoc:
 
 end
 

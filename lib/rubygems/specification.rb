@@ -12,6 +12,7 @@ require 'rubygems/platform'
 require 'rubygems/deprecate'
 require 'rubygems/basic_specification'
 require 'rubygems/stub_specification'
+require 'rubygems/util/stringio'
 
 # :stopdoc:
 # date.rb can't be loaded for `make install` due to miniruby
@@ -1393,7 +1394,7 @@ class Gem::Specification < Gem::BasicSpecification
   # Returns the build_args used to install the gem
 
   def build_args
-    if File.exists? build_info_file
+    if File.exist? build_info_file
       File.readlines(build_info_file).map { |x| x.strip }
     else
       []
@@ -1407,7 +1408,7 @@ class Gem::Specification < Gem::BasicSpecification
   def build_extensions # :nodoc:
     return if default_gem?
     return if extensions.empty?
-    return if installed_by_version < Gem::Version.new('2.2')
+    return if installed_by_version < Gem::Version.new('2.2.0.preview.2')
     return if File.exist? gem_build_complete_path
     return if !File.writable?(base_dir) &&
               !File.exist?(File.join(base_dir, 'extensions'))
@@ -2165,7 +2166,7 @@ class Gem::Specification < Gem::BasicSpecification
   end
 
   ##
-  # Used by Gem::DependencyResolver to order Gem::Specification objects
+  # Used by Gem::Resolver to order Gem::Specification objects
 
   def source # :nodoc:
     self
@@ -2363,7 +2364,7 @@ class Gem::Specification < Gem::BasicSpecification
       builder << self
       ast = builder.tree
 
-      io = StringIO.new
+      io = Gem::StringSink.new
       io.set_encoding Encoding::UTF_8 if Object.const_defined? :Encoding
 
       Psych::Visitors::Emitter.new(io).accept(ast)
@@ -2482,7 +2483,6 @@ class Gem::Specification < Gem::BasicSpecification
       end
     end
 
-    # FIX: uhhhh single element array.each?
     [:authors].each do |field|
       val = self.send field
       raise Gem::InvalidSpecificationException, "#{field} may not be empty" if
@@ -2534,7 +2534,6 @@ licenses is empty.  Use a license abbreviation from:
 
     # reject lazy developers:
 
-    # FIX: Doesn't this just evaluate to "FIXME" or "TODO"?
     lazy = '"FIxxxXME" or "TOxxxDO"'.gsub(/xxx/, '')
 
     unless authors.grep(/FI XME|TO DO/x).empty? then
@@ -2580,7 +2579,33 @@ licenses is empty.  Use a license abbreviation from:
       warning "#{executable_path} is missing #! line" unless shebang
     end
 
+    validate_dependencies
+
+    true
+  ensure
+    if $! or @warnings > 0 then
+      alert_warning "See http://guides.rubygems.org/specification-reference/ for help"
+    end
+  end
+
+  ##
+  # Checks that dependencies use requirements as we recommend.  Warnings are
+  # issued when dependencies are open-ended or overly strict for semantic
+  # versioning.
+
+  def validate_dependencies # :nodoc:
+    seen = {}
+
     dependencies.each do |dep|
+      if prev = seen[dep.name] then
+        raise Gem::InvalidSpecificationException, <<-MESSAGE
+duplicate dependency on #{dep}, (#{prev.requirement}) use:
+    add_runtime_dependency '#{dep.name}', '#{dep.requirement}', '#{prev.requirement}'
+        MESSAGE
+      end
+
+      seen[dep.name] = dep
+
       prerelease_dep = dep.requirements_list.any? do |req|
         Gem::Requirement.new(req).prerelease?
       end
@@ -2596,22 +2621,38 @@ licenses is empty.  Use a license abbreviation from:
         end
 
       if overly_strict then
-        _, version = dep.requirement.requirements.first
+        _, dep_version = dep.requirement.requirements.first
 
-        base = version.segments.first 2
+        base = dep_version.segments.first 2
 
         warning <<-WARNING
 pessimistic dependency on #{dep} may be overly strict
   if #{dep.name} is semantically versioned, use:
-    add_#{dep.type}_dependency '#{dep.name}', '~> #{base.join '.'}', '>= #{version}'
+    add_#{dep.type}_dependency '#{dep.name}', '~> #{base.join '.'}', '>= #{dep_version}'
         WARNING
       end
-    end
 
-    true
-  ensure
-    if $! or @warnings > 0 then
-      alert_warning "See http://guides.rubygems.org/specification-reference/ for help"
+      open_ended = dep.requirement.requirements.all? do |op, version|
+        not version.prerelease? and (op == '>' or op == '>=')
+      end
+
+      if open_ended then
+        op, dep_version = dep.requirement.requirements.first
+
+        base = dep_version.segments.first 2
+
+        bugfix = if op == '>' then
+                   ", '> #{dep_version}'"
+                 elsif op == '>=' and base != dep_version.segments then
+                   ", '>= #{dep_version}'"
+                 end
+
+        warning <<-WARNING
+open-ended dependency on #{dep} is not recommended
+  if #{dep.name} is semantically versioned, use:
+    add_#{dep.type}_dependency '#{dep.name}', '~> #{base.join '.'}'#{bugfix}
+        WARNING
+      end
     end
   end
 
@@ -2650,7 +2691,6 @@ pessimistic dependency on #{dep} may be overly strict
     false
   end
 
-  # FIX: have this handle the platform/new_platform/original_platform bullshit
   def yaml_initialize(tag, vals) # :nodoc:
     vals.each do |ivar, val|
       case ivar

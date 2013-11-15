@@ -185,7 +185,7 @@ gem 'other', version
   end unless Gem.win_platform?
 
   def test_ensure_dependency
-    quick_spec 'a'
+    util_spec 'a'
 
     dep = Gem::Dependency.new 'a', '>= 2'
     assert @installer.ensure_dependency(@spec, dep)
@@ -606,7 +606,7 @@ gem 'other', version
   end
 
   def test_initialize
-    spec = quick_spec 'a' do |s| s.platform = Gem::Platform.new 'mswin32' end
+    spec = util_spec 'a' do |s| s.platform = Gem::Platform.new 'mswin32' end
     gem = File.join @tempdir, spec.file_name
 
     Dir.mkdir util_inst_bindir
@@ -1004,6 +1004,10 @@ gem 'other', version
     skip '1.9.2 and earlier mkmf.rb does not create TOUCH' if
       RUBY_VERSION < '1.9.3'
 
+    if RUBY_VERSION == "1.9.3" and RUBY_PATCHLEVEL <= 194
+      skip "TOUCH was introduced into 1.9.3 after p194"
+    end
+
     @spec.require_paths = ["."]
 
     @spec.extensions << "extconf.rb"
@@ -1038,13 +1042,19 @@ gem 'other', version
     puts '-' * 78
     puts File.read File.join(@gemhome, 'gems', 'a-2', 'Makefile')
     puts '-' * 78
-    puts File.read File.join(@gemhome, 'gems', 'a-2', 'gem_make.out')
-    puts '-' * 78
+
+    path = File.join(@gemhome, 'gems', 'a-2', 'gem_make.out')
+
+    if File.exists?(path)
+      puts File.read(path)
+      puts '-' * 78
+    end
+
     raise
   end
 
   def test_installation_satisfies_dependency_eh
-    quick_spec 'a'
+    util_spec 'a'
 
     dep = Gem::Dependency.new 'a', '>= 2'
     assert @installer.installation_satisfies_dependency?(dep)
@@ -1113,7 +1123,7 @@ gem 'other', version
   end
 
   def test_pre_install_checks_wrong_rubygems_version
-    spec = quick_spec 'old_rubygems_required', '1' do |s|
+    spec = util_spec 'old_rubygems_required', '1' do |s|
       s.required_rubygems_version = '< 0'
     end
 
@@ -1400,7 +1410,7 @@ gem 'other', version
   end
 
   def old_ruby_required
-    spec = quick_spec 'old_ruby_required', '1' do |s|
+    spec = util_spec 'old_ruby_required', '1' do |s|
       s.required_ruby_version = '= 1.4.6'
     end
 
@@ -1410,7 +1420,7 @@ gem 'other', version
   end
 
   def util_execless
-    @spec = quick_spec 'z'
+    @spec = util_spec 'z'
     util_build_gem @spec
 
     @installer = util_installer @spec, @gemhome

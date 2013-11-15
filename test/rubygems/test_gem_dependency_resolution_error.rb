@@ -5,16 +5,16 @@ class TestGemDependencyResolutionError < Gem::TestCase
   def setup
     super
 
-    @DR = Gem::DependencyResolver
+    @DR = Gem::Resolver
 
-    @spec = quick_spec 'a', 2
+    @spec = util_spec 'a', 2
 
     @a1_req = @DR::DependencyRequest.new dep('a', '= 1'), nil
     @a2_req = @DR::DependencyRequest.new dep('a', '= 2'), nil
 
     @activated = @DR::ActivationRequest.new @spec, @a2_req
 
-    @conflict = @DR::DependencyConflict.new @a1_req, @activated
+    @conflict = @DR::Conflict.new @a1_req, @activated
 
     @error = Gem::DependencyResolutionError.new @conflict
   end

@@ -43,6 +43,11 @@ Minor enhancements:
   Leighton.
 * RubyGems now warns when a gem has a pessimistic version dependency that may
   be too strict.
+* RubyGems now warns when a gem has an open-ended dependency.
+* RubyGems now raises an exception when a dependency for a gem is defined
+  twice.
+
+=== 2.1.11 / 2013-11-12
 
 Bug fixes:
 
@@ -51,6 +56,8 @@ Bug fixes:
 * Restored wildcard handling when installing gems.  Issue #697 by Chuck Remes.
 * Added DigiCert High Assurance EV Root CA certificate for the cloudfront.net
   certificate change.
+* The Gem::RemoteFetcher tests now choose the test server port more reliably.
+  Pull Request #706 by akr.
 
 === 2.1.10 / 2013-10-24
 
@@ -261,6 +268,18 @@ Bug fixes:
   #625 by elarkin
 * Fixed credential creation for `gem push` when `--host` is not given.  Pull
   request #622 by Arthur Nogueira Neves
+
+=== 2.0.14 / 2013-11-12
+
+Bug fixes:
+
+* Gem::Specification::remove_spec no longer checks for existence of the spec
+  to be removed.  Issue #698 by Tiago Macedo.
+* Restored wildcard handling when installing gems.  Issue #697 by Chuck Remes.
+* Added DigiCert High Assurance EV Root CA certificate for the cloudfront.net
+  certificate change.
+* The Gem::RemoteFetcher tests now choose the test server port more reliably.
+  Pull Request #706 by akr.
 
 === 2.0.13 / 2013-10-24
 

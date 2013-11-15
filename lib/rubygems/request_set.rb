@@ -1,6 +1,5 @@
 require 'rubygems'
 require 'rubygems/dependency'
-require 'rubygems/dependency_resolver'
 require 'rubygems/dependency_list'
 require 'rubygems/installer'
 require 'tsort'
@@ -32,6 +31,16 @@ class Gem::RequestSet
   attr_accessor :development
 
   ##
+  # The set of git gems imported via load_gemdeps.
+
+  attr_reader :git_set # :nodoc:
+
+  ##
+  # Sets used for resolution
+
+  attr_reader :sets # :nodoc:
+
+  ##
   # Treat missing dependencies as silent errors
 
   attr_accessor :soft_missing
@@ -53,13 +62,16 @@ class Gem::RequestSet
   def initialize *deps
     @dependencies = deps
 
-    @always_install = []
-    @development    = false
-    @requests       = []
-    @soft_missing   = false
-    @sorted         = nil
-    @specs          = nil
-    @vendor_set     = nil
+    @always_install   = []
+    @dependency_names = {}
+    @development      = false
+    @git_set          = nil
+    @requests         = []
+    @sets             = []
+    @soft_missing     = false
+    @sorted           = nil
+    @specs            = nil
+    @vendor_set       = nil
 
     yield self if block_given?
   end
@@ -68,7 +80,13 @@ class Gem::RequestSet
   # Declare that a gem of name +name+ with +reqs+ requirements is needed.
 
   def gem name, *reqs
-    @dependencies << Gem::Dependency.new(name, reqs)
+    if dep = @dependency_names[name] then
+      dep.requirement.concat reqs
+    else
+      dep = Gem::Dependency.new name, reqs
+      @dependency_names[name] = dep
+      @dependencies << dep
+    end
   end
 
   ##
@@ -171,7 +189,8 @@ class Gem::RequestSet
   # Load a dependency management file.
 
   def load_gemdeps path, without_groups = []
-    @vendor_set = Gem::DependencyResolver::VendorSet.new
+    @git_set    = Gem::Resolver::GitSet.new
+    @vendor_set = Gem::Resolver::VendorSet.new
 
     gf = Gem::RequestSet::GemDependencyAPI.new self, path
     gf.without_groups = without_groups if without_groups
@@ -182,16 +201,14 @@ class Gem::RequestSet
   # Resolve the requested dependencies and return an Array of Specification
   # objects to be activated.
 
-  def resolve set = Gem::DependencyResolver::IndexSet.new
-    sets = [set, @vendor_set].compact
+  def resolve set = Gem::Resolver::IndexSet.new
+    @sets << set
+    @sets << @git_set
+    @sets << @vendor_set
 
-    set = if sets.size == 1 then
-            sets.first
-          else
-            Gem::DependencyResolver.compose_sets(*sets)
-          end
+    set = Gem::Resolver.compose_sets(*@sets)
 
-    resolver = Gem::DependencyResolver.new @dependencies, set
+    resolver = Gem::Resolver.new @dependencies, set
     resolver.development  = @development
     resolver.soft_missing = @soft_missing
 
@@ -203,7 +220,7 @@ class Gem::RequestSet
   # and return an Array of Specification objects to be activated.
 
   def resolve_current
-    resolve Gem::DependencyResolver::CurrentSet.new
+    resolve Gem::Resolver::CurrentSet.new
   end
 
   def sorted_requests
