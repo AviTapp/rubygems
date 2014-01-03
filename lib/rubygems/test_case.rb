@@ -24,16 +24,19 @@ unless Gem::Dependency.new('rdoc', '>= 3.10').matching_specs.empty?
   gem 'json'
 end
 
-require 'rubygems/deprecate'
 require 'minitest/autorun'
+
+require 'rubygems/deprecate'
+
 require 'fileutils'
+require 'pathname'
+require 'pp'
+require 'rubygems/package'
+require 'shellwords'
 require 'tmpdir'
 require 'uri'
-require 'rubygems/package'
-require 'pp'
 require 'zlib'
-require 'pathname'
-require 'shellwords'
+
 Gem.load_yaml
 
 require 'rubygems/mock_gem_ui'
@@ -84,6 +87,10 @@ end
 class Gem::TestCase < MiniTest::Unit::TestCase
 
   attr_accessor :fetcher # :nodoc:
+
+  attr_accessor :gem_repo # :nodoc:
+
+  attr_accessor :uri # :nodoc:
 
   def assert_activate expected, *specs
     specs.each do |spec|
@@ -381,6 +388,8 @@ class Gem::TestCase < MiniTest::Unit::TestCase
   # Yields the +specification+ to the block, if given
 
   def git_gem name = 'a', version = 1
+    have_git?
+
     directory = File.join 'git', name
     directory = File.expand_path directory
 
@@ -411,6 +420,23 @@ class Gem::TestCase < MiniTest::Unit::TestCase
     end
 
     return name, git_spec.version, directory, head
+  end
+
+  ##
+  # Skips this test unless you have a git executable
+
+  def have_git?
+    return if in_path? @git
+
+    skip 'cannot find git executable, use GIT environment variable to set'
+  end
+
+  def in_path? executable # :nodoc:
+    return true if %r%\A([A-Z]:|/)% =~ executable and File.exist? executable
+
+    ENV['PATH'].split(File::PATH_SEPARATOR).any? do |directory|
+      File.exist? File.join directory, executable
+    end
   end
 
   ##
@@ -1130,8 +1156,10 @@ Also, a list:
   def dependency_request dep, from_name, from_version, parent = nil
     remote = Gem::Source.new @uri
 
-    parent ||= Gem::Resolver::DependencyRequest.new \
-      dep, nil
+    unless parent then
+      parent_dep = dep from_name, from_version
+      parent = Gem::Resolver::DependencyRequest.new parent_dep, nil
+    end
 
     spec = Gem::Resolver::IndexSpecification.new \
       nil, from_name, from_version, remote, Gem::Platform::RUBY
@@ -1175,8 +1203,8 @@ Also, a list:
   #     end
   #   end
 
-  def spec_fetcher
-    Gem::TestCase::SpecFetcherSetup.declare self do |spec_fetcher_setup|
+  def spec_fetcher repository = @gem_repo
+    Gem::TestCase::SpecFetcherSetup.declare self, repository do |spec_fetcher_setup|
       yield spec_fetcher_setup if block_given?
     end
   end
