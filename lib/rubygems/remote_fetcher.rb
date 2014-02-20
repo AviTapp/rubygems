@@ -131,11 +131,19 @@ class Gem::RemoteFetcher
 
     FileUtils.mkdir_p cache_dir rescue nil unless File.exist? cache_dir
 
-   # Always escape URI's to deal with potential spaces and such
-    unless URI::Generic === source_uri
-      source_uri = URI.parse(URI.const_defined?(:DEFAULT_PARSER) ?
-                             URI::DEFAULT_PARSER.escape(source_uri.to_s) :
-                             URI.escape(source_uri.to_s))
+    # Always escape URI's to deal with potential spaces and such
+    # It should also be considered that source_uri may already be
+    # a valid URI with escaped characters. e.g. "{DESede}" is encoded
+    # as "%7BDESede%7D". If this is escaped again the percentage
+    # symbols will be escaped.
+    unless source_uri.is_a?(URI::Generic)
+      begin
+        source_uri = URI.parse(source_uri)
+      rescue
+        source_uri = URI.parse(URI.const_defined?(:DEFAULT_PARSER) ?
+                               URI::DEFAULT_PARSER.escape(source_uri.to_s) :
+                               URI.escape(source_uri.to_s))
+      end
     end
 
     scheme = source_uri.scheme
@@ -149,8 +157,7 @@ class Gem::RemoteFetcher
     when 'http', 'https' then
       unless File.exist? local_gem_path then
         begin
-          say "Downloading gem #{gem_file_name}" if
-            Gem.configuration.really_verbose
+          verbose "Downloading gem #{gem_file_name}"
 
           remote_gem_path = source_uri + "gems/#{gem_file_name}"
 
@@ -160,8 +167,7 @@ class Gem::RemoteFetcher
 
           alternate_name = "#{spec.original_name}.gem"
 
-          say "Failed, downloading gem #{alternate_name}" if
-            Gem.configuration.really_verbose
+          verbose "Failed, downloading gem #{alternate_name}"
 
           remote_gem_path = source_uri + "gems/#{alternate_name}"
 
@@ -180,8 +186,7 @@ class Gem::RemoteFetcher
         local_gem_path = source_uri.to_s
       end
 
-      say "Using local gem #{local_gem_path}" if
-        Gem.configuration.really_verbose
+      verbose "Using local gem #{local_gem_path}"
     when nil then # TODO test for local overriding cache
       source_path = if Gem.win_platform? && source_uri.scheme &&
                        !source_uri.path.include?(':') then
@@ -199,8 +204,7 @@ class Gem::RemoteFetcher
         local_gem_path = source_uri.to_s
       end
 
-      say "Using local gem #{local_gem_path}" if
-        Gem.configuration.really_verbose
+      verbose "Using local gem #{local_gem_path}"
     else
       raise ArgumentError, "unsupported URI scheme #{source_uri.scheme}"
     end
@@ -224,6 +228,7 @@ class Gem::RemoteFetcher
 
     case response
     when Net::HTTPOK, Net::HTTPNotModified then
+      response.uri = uri if response.respond_to? :uri
       head ? response : response.body
     when Net::HTTPMovedPermanently, Net::HTTPFound, Net::HTTPSeeOther,
          Net::HTTPTemporaryRedirect then
@@ -285,20 +290,20 @@ class Gem::RemoteFetcher
   def cache_update_path uri, path = nil, update = true
     mtime = path && File.stat(path).mtime rescue nil
 
-    if mtime && Net::HTTPNotModified === fetch_path(uri, mtime, true)
-      Gem.read_binary(path)
-    else
-      data = fetch_path(uri)
+    data = fetch_path(uri, mtime)
 
-      if update and path then
-        open(path, 'wb') do |io|
-          io.flock(File::LOCK_EX)
-          io.write data
-        end
-      end
-
-      data
+    if data == nil # indicates the server returned 304 Not Modified
+      return Gem.read_binary(path)
     end
+
+    if update and path
+      open(path, 'wb') do |io|
+        io.flock(File::LOCK_EX)
+        io.write data
+      end
+    end
+
+    data
   end
 
   ##

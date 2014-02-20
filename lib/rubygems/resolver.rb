@@ -27,9 +27,14 @@ class Gem::Resolver
   attr_reader :conflicts
 
   ##
-  # Set to true if development dependencies should be considered.
+  # Set to true if all development dependencies should be considered.
 
   attr_accessor :development
+
+  ##
+  # Set to true if immediate development dependencies should be considered.
+
+  attr_accessor :development_shallow
 
   ##
   # When true, no dependencies are looked up for requested gems.
@@ -59,6 +64,8 @@ class Gem::Resolver
 
     sets = sets.map do |set|
       case set
+      when Gem::Resolver::BestSet then
+        set
       when Gem::Resolver::ComposedSet then
         set.sets
       else
@@ -98,6 +105,7 @@ class Gem::Resolver
 
     @conflicts           = []
     @development         = false
+    @development_shallow = false
     @ignore_dependencies = false
     @missing             = []
     @soft_missing        = false
@@ -142,6 +150,8 @@ class Gem::Resolver
 
     s.dependencies.reverse_each do |d|
       next if d.type == :development and not @development
+      next if d.type == :development and @development_shallow and
+              act.development?
       reqs.add Gem::Resolver::DependencyRequest.new(d, act)
       @stats.requirement!
     end
@@ -401,7 +411,10 @@ class Gem::Resolver
     @missing << dep
 
     unless @soft_missing
-      raise Gem::UnsatisfiableDependencyError.new(dep, platform_mismatch)
+      exc = Gem::UnsatisfiableDependencyError.new dep, platform_mismatch
+      exc.errors = @set.errors
+
+      raise exc
     end
   end
 

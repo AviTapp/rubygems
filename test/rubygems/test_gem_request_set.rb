@@ -59,6 +59,8 @@ class TestGemRequestSet < Gem::TestCase
     assert_includes installed, 'a-2'
     assert_path_exists File.join @gemhome, 'gems', 'a-2'
     assert_path_exists 'gem.deps.rb.lock'
+
+    assert rs.remote
   end
 
   def test_install_from_gemdeps_install_dir
@@ -87,6 +89,25 @@ class TestGemRequestSet < Gem::TestCase
 
     assert_includes installed, 'a-2'
     refute_path_exists File.join Gem.dir, 'gems', 'a-2'
+  end
+
+  def test_install_from_gemdeps_local
+    spec_fetcher do |fetcher|
+      fetcher.gem 'a', 2
+    end
+
+    rs = Gem::RequestSet.new
+
+    open 'gem.deps.rb', 'w' do |io|
+      io.puts 'gem "a"'
+      io.flush
+
+      assert_raises Gem::UnsatisfiableDependencyError do
+        rs.install_from_gemdeps :gemdeps => io.path, :domain => :local
+      end
+    end
+
+    refute rs.remote
   end
 
   def test_install_from_gemdeps_lockfile
@@ -168,12 +189,47 @@ DEPENDENCIES
     rs = Gem::RequestSet.new
     rs.gem "a"
 
+    orig_errors = rs.errors
+
     res = rs.resolve StaticSet.new([a, b])
     assert_equal 2, res.size
 
     names = res.map { |s| s.full_name }.sort
 
     assert_equal ["a-2", "b-2"], names
+
+    refute_same orig_errors, rs.errors
+  end
+
+  def test_resolve_development
+    a = util_spec 'a', 1
+
+    rs = Gem::RequestSet.new
+    rs.gem 'a'
+    rs.development = true
+
+    res = rs.resolve StaticSet.new [a]
+    assert_equal 1, res.size
+
+    assert rs.resolver.development
+    refute rs.resolver.development_shallow
+  end
+
+  def test_resolve_development_shallow
+    a = util_spec 'a', 1 do |s| s.add_development_dependency 'b' end
+    b = util_spec 'b', 1 do |s| s.add_development_dependency 'c' end
+    c = util_spec 'c', 1
+
+    rs = Gem::RequestSet.new
+    rs.gem 'a'
+    rs.development = true
+    rs.development_shallow = true
+
+    res = rs.resolve StaticSet.new [a, b, c]
+    assert_equal 2, res.size
+
+    assert rs.resolver.development
+    assert rs.resolver.development_shallow
   end
 
   def test_resolve_git
@@ -329,4 +385,20 @@ DEPENDENCIES
 
     assert_equal %w!b-1 a-1!, installed.map { |s| s.full_name }
   end
+
+  def test_sorted_requests_development_shallow
+    a = util_spec 'a', 1 do |s| s.add_development_dependency 'b' end
+    b = util_spec 'b', 1 do |s| s.add_development_dependency 'c' end
+    c = util_spec 'c', 1
+
+    rs = Gem::RequestSet.new
+    rs.gem 'a'
+    rs.development = true
+    rs.development_shallow = true
+
+    rs.resolve StaticSet.new [a, b, c]
+
+    assert_equal %w[a-1 b-1], rs.sorted_requests.map { |req| req.full_name }
+  end
+
 end

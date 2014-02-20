@@ -28,6 +28,16 @@ class TestGemDependency < Gem::TestCase
     assert_equal req(">= 0"), d.requirement
   end
 
+  def test_initialize_prerelease
+    d = dep 'd', '1.a'
+
+    assert d.prerelease?
+
+    d = dep 'd', '= 1.a'
+
+    assert d.prerelease?
+  end
+
   def test_initialize_type
     assert_equal :runtime, dep("pkg").type
     assert_equal :development, dep("pkg", [], :development).type
@@ -113,6 +123,60 @@ class TestGemDependency < Gem::TestCase
     refute_equal dep("pkg", "1.0").hash,   dep("pkg", "2.0").hash, "requirement"
     refute_equal dep("pkg", "1.0").hash,   dep("abc", "1.0").hash, "name"
     refute_equal dep("pkg", :development), dep("pkg", :runtime), "type"
+  end
+
+  def test_match_eh_name_tuple
+    a_dep = dep 'a'
+
+    a_tup = Gem::NameTuple.new 'a', 1
+    b_tup = Gem::NameTuple.new 'b', 2
+    c_tup = Gem::NameTuple.new 'c', '2.a'
+
+    assert a_dep.match? a_tup
+    refute a_dep.match? b_tup
+
+    b_dep = dep 'b', '>= 3'
+
+    refute b_dep.match? b_tup
+
+    c_dep = dep 'c', '>= 1'
+
+    refute c_dep.match? c_tup
+
+    c_dep = dep 'c'
+
+    refute c_dep.match? c_tup
+
+    c_dep = dep 'c', '2.a'
+
+    assert c_dep.match? c_tup
+  end
+
+  def test_match_eh_specification
+    a_dep = dep 'a'
+
+    a_spec = util_spec 'a', 1
+    b_spec = util_spec 'b', 2
+    c_spec = util_spec 'c', '2.a'
+
+    assert a_dep.match? a_spec
+    refute a_dep.match? b_spec
+
+    b_dep = dep 'b', '>= 3'
+
+    refute b_dep.match? b_spec
+
+    c_dep = dep 'c', '>= 1'
+
+    refute c_dep.match? c_spec
+
+    c_dep = dep 'c'
+
+    refute c_dep.match? c_spec
+
+    c_dep = dep 'c', '2.a'
+
+    assert c_dep.match? c_spec
   end
 
   def test_merge

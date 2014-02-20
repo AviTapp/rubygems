@@ -33,6 +33,14 @@ class TestGemResolver < Gem::TestCase
     assert_same Gem::Resolver, Gem::DependencyResolver
   end
 
+  def test_self_compose_sets_best_set
+    best_set = @DR::BestSet.new
+
+    composed = @DR.compose_sets best_set
+
+    assert_equal best_set, composed
+  end
+
   def test_self_compose_sets_multiple
     index_set  = @DR::IndexSet.new
     vendor_set = @DR::VendorSet.new
@@ -130,6 +138,58 @@ class TestGemResolver < Gem::TestCase
     res.requests a1, act, reqs
 
     assert_empty reqs
+  end
+
+  def test_resolve_development
+    a_spec = util_spec 'a', 1 do |s| s.add_development_dependency 'b' end
+    b_spec = util_spec 'b', 1 do |s| s.add_development_dependency 'c' end
+    c_spec = util_spec 'c', 1
+
+    a_dep = make_dep 'a', '= 1'
+
+    deps = [a_dep]
+
+    s = set a_spec, b_spec, c_spec
+
+    res = Gem::Resolver.new deps, s
+
+    res.development = true
+
+    assert_resolves_to [a_spec, b_spec, c_spec], res
+  end
+
+  def test_resolve_development_shallow
+    a_spec = util_spec 'a', 1 do |s| s.add_development_dependency 'b' end
+    b_spec = util_spec 'b', 1 do |s| s.add_development_dependency 'c' end
+    c_spec = util_spec 'c', 1
+
+    a_dep = make_dep 'a', '= 1'
+
+    deps = [a_dep]
+
+    s = set a_spec, b_spec, c_spec
+
+    res = Gem::Resolver.new deps, s
+
+    res.development = true
+    res.development_shallow = true
+
+    assert_resolves_to [a_spec, b_spec], res
+  end
+
+  def test_resolve_remote_missing_dependency
+    @fetcher = Gem::FakeFetcher.new
+    Gem::RemoteFetcher.fetcher = @fetcher
+
+    a_dep = make_dep 'a', '= 1'
+
+    res = Gem::Resolver.new [a_dep], Gem::Resolver::IndexSet.new
+
+    e = assert_raises Gem::UnsatisfiableDepedencyError do
+      res.resolve
+    end
+
+    refute_empty e.errors
   end
 
   def test_no_overlap_specificly

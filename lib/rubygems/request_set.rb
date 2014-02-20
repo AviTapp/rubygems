@@ -21,11 +21,21 @@ class Gem::RequestSet
   ##
   # Array of gems to install even if already installed
 
-  attr_reader :always_install
+  attr_accessor :always_install
 
   attr_reader :dependencies
 
   attr_accessor :development
+
+  ##
+  # Errors fetching gems during resolution.
+
+  attr_reader :errors
+
+  ##
+  # Set to true if you want to install only direct development dependencies.
+
+  attr_accessor :development_shallow
 
   ##
   # The set of git gems imported via load_gemdeps.
@@ -37,6 +47,13 @@ class Gem::RequestSet
   # are installed.
 
   attr_accessor :ignore_dependencies
+
+  ##
+  # When false no remote sets are used for resolving gems.
+
+  attr_accessor :remote
+
+  attr_reader :resolver # :nodoc:
 
   ##
   # Sets used for resolution
@@ -68,9 +85,12 @@ class Gem::RequestSet
     @always_install      = []
     @dependency_names    = {}
     @development         = false
+    @development_shallow = false
+    @errors              = []
     @git_set             = nil
     @ignore_dependencies = false
     @install_dir         = Gem.dir
+    @remote              = true
     @requests            = []
     @sets                = []
     @soft_missing        = false
@@ -150,6 +170,7 @@ class Gem::RequestSet
     gemdeps = options[:gemdeps]
 
     @install_dir = options[:install_dir] || Gem.dir
+    @remote      = options[:domain] != :local
 
     load_gemdeps gemdeps, options[:without_groups]
 
@@ -235,15 +256,21 @@ class Gem::RequestSet
     @sets << @vendor_set
 
     set = Gem::Resolver.compose_sets(*@sets)
+    set.remote = @remote
 
     resolver = Gem::Resolver.new @dependencies, set
     resolver.development         = @development
+    resolver.development_shallow = @development_shallow
     resolver.ignore_dependencies = @ignore_dependencies
     resolver.soft_missing        = @soft_missing
 
     @resolver = resolver
 
     @requests = resolver.resolve
+
+    @errors = set.errors
+
+    @requests
   end
 
   ##
@@ -275,6 +302,7 @@ class Gem::RequestSet
   def tsort_each_child node # :nodoc:
     node.spec.dependencies.each do |dep|
       next if dep.type == :development and not @development
+      next if dep.type == :development and @development_shallow
 
       match = @requests.find { |r| dep.match? r.spec.name, r.spec.version }
       if match

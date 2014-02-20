@@ -5,6 +5,21 @@
 class Gem::Resolver::Set
 
   ##
+  # Set to true to disable network access for this set
+
+  attr_accessor :remote
+
+  ##
+  # Errors encountered when resolving gems
+
+  attr_accessor :errors
+
+  def initialize # :nodoc:
+    @remote = true
+    @errors = []
+  end
+
+  ##
   # The find_all method must be implemented.  It returns all Resolver
   # Specification objects matching the given DependencyRequest +req+.
 
@@ -21,6 +36,14 @@ class Gem::Resolver::Set
   # matching +reqs+.
 
   def prefetch reqs
+  end
+
+  ##
+  # When true, this set is allowed to access the network when looking up
+  # specifications or dependencies.
+
+  def remote? # :nodoc:
+    @remote
   end
 
 end

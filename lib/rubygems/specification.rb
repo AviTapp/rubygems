@@ -241,6 +241,28 @@ class Gem::Specification < Gem::BasicSpecification
   attr_reader :summary
 
   ##
+  # Singular writer for #authors
+  #
+  # Usage:
+  #
+  #   spec.author = 'John Jones'
+
+  def author= o
+    self.authors = [o]
+  end
+
+  ##
+  # Sets the list of authors, ensuring it is an array.
+  #
+  # Usage:
+  #
+  #   spec.authors = ['John Jones', 'Mary Smith']
+
+  def authors= value
+    @authors = Array(value).flatten.grep(String)
+  end
+
+  ##
   # The platform this gem runs on.
   #
   # This is usually Gem::Platform::RUBY or Gem::Platform::CURRENT.
@@ -440,28 +462,6 @@ class Gem::Specification < Gem::BasicSpecification
 
   def add_runtime_dependency(gem, *requirements)
     add_dependency_with_type(gem, :runtime, *requirements)
-  end
-
-  ##
-  # Singular writer for #authors
-  #
-  # Usage:
-  #
-  #   spec.author = 'John Jones'
-
-  def author= o
-    self.authors = [o]
-  end
-
-  ##
-  # Sets the list of authors, ensuring it is an array.
-  #
-  # Usage:
-  #
-  #   spec.authors = ['John Jones', 'Mary Smith']
-
-  def authors= value
-    @authors = Array(value).flatten.grep(String)
   end
 
   ##
@@ -1948,6 +1948,19 @@ class Gem::Specification < Gem::BasicSpecification
     else
       super
     end
+  end
+
+  ##
+  # Is this specification missing its extensions?  When this returns true you
+  # probably want to build_extensions
+
+  def missing_extensions?
+    return false if default_gem?
+    return false if extensions.empty?
+    return false if installed_by_version < Gem::Version.new('2.2.0.preview.2')
+    return false if File.exist? gem_build_complete_path
+
+    true
   end
 
   ##

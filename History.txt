@@ -1,6 +1,64 @@
 # coding: UTF-8
 
-=== 2.2.1
+=== 2.3
+
+Minor enhancements:
+
+* Added the `open` command which allows you to inspect the source of a gem
+  using your editor.
+  Issue #789 by Mike Perham. Pull request #804 by Vitali F.
+* The `update` command shows a summary of which gems were and were not
+  updated.  Issue #544 by Mark D. Blackwell.
+  Pull request #777 by Tejas Bubane.
+* A gem is installable from an IO again (as in RubyGems 1.8.x and older).
+  Pull request #716 by Xavier Shay.
+* RubyGems no longer attempts to build extensions during activation.  Instead
+  a warning is issued instructing you to run `gem pristine` which will build
+  the extensions for the current platform.  Issue #796 by dunric.
+* Added Gem::UserInteraction#verbose which prints when the --verbose option is
+  given.  Pull request #811 by Aaron Patterson.
+* Cleaned up unneeded load_yaml bootstrapping in Rakefile.  Pull request #815
+  by Zachary Scott.
+
+Bug fixes:
+
+* RubyGems now only fetches the latest specs to find misspellings which speeds
+  up gem suggestions.  Pull request #808 by Aaron Patterson.
+* Improved speed of levenshtein distance for gem suggestion misspellings.
+  Pull requests #809, #812 by Aaron Patterson.
+* Reduced requests when fetching gems with the bundler API.  Pull request #773
+  by Charlie Somerville.
+* RubyGems now prints release notes from the current release.  Bug #814 by
+  André Arko.
+
+=== 2.2.2 / 2014-02-05
+
+Bug fixes:
+
+* Fixed ruby tests when BASERUBY is not set.  Patch for #778 by Nobuyoshi
+  Nakada.
+* Removed double requests in RemoteFetcher#cache_update_path to improve remote
+  install speed.  Pull request #772 by Charlie Somerville.
+* The mkmf.log is now placed next to gem_make.out when building extensions.
+* `gem install -g --local` no longer accesses the network.  Bug #776 by Jeremy
+  Evans.
+* RubyGems now correctly handles URL passwords with encoded characters.  Pull
+  request #781 by Brian Fletcher.
+* RubyGems now correctly escapes URL characters.  Pull request #788 by Brian
+  Fletcher.
+* RubyGems can now unpack tar files where the type flag is not given.  Pull
+  request #790 by Cody Russell.
+* Typo corrections.  Pull request ruby/ruby#506 by windwiny.
+* RubyGems now uses both the default certificates and ssl_ca_cert instead of
+  one or the other.  Pull request #795 by zebardy.
+* RubyGems can now use the bundler API against hosted gem servers in a
+  directory.  Pull request #801 by Brian Fletcher.
+* RubyGems bin stubs now ignore non-versions.  This allows RubyGems bin stubs
+  to list file names like "_foo_".  Issue #799 by Postmodern.
+* Restored behavior of Gem::Version::new when subclassed.  Issue #805 by
+  Sergio Rubio.
+
+=== 2.2.1 / 2014-01-06
 
 Bug fixes:
 
@@ -14,6 +72,19 @@ Bug fixes:
   Arash Mousavi, pull request #764 by Tim Moore.
 * Removed TODO about syntax that works in Ruby 1.8.7.  Pull request #765 by
   Benjamin Fleischer.
+* Switched Gem.ruby_api_version to use RbConfig::CONFIG['ruby_version'] which
+  has the same value but is overridable by packagers through
+  --with-ruby-version= when configuring ruby.  Bug #770 by Jeremy Evans.
+* RubyGems now prefers the bundler API for `gem install` to reduce HTTP
+  requests.  (This change was intended for RubyGems 2.2.0 but was missed.)
+  This should address bug #762 by Dan Peterson and bug #766 by mipearson.
+* Added Gem::BasicSpecification#source_paths so documentation or analysis
+  tools can work properly as require_paths no longer returns extension source
+  directories.  Bug #758 Vít Ondruch.
+* Gem.read_binary can read read-only files again.  This caused file://
+  repositories to stop working.  Bug #761 by John Anderson.
+* Fixed specification file sorting for Ruby 1.8.7 compatibility.  Pull
+  request #763 by James Mead
 
 === 2.2.0 / 2013-12-26
 

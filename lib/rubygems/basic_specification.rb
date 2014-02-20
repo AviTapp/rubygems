@@ -15,6 +15,11 @@ class Gem::BasicSpecification
   attr_writer :extension_dir # :nodoc:
 
   ##
+  # Is this specification ignored for activation purposes?
+
+  attr_writer :ignored # :nodoc:
+
+  ##
   # The path this gemspec was loaded from.  This attribute is not persisted.
 
   attr_reader :loaded_from
@@ -53,7 +58,16 @@ class Gem::BasicSpecification
   # Return true if this spec can require +file+.
 
   def contains_requirable_file? file
-    build_extensions
+    if instance_variable_defined?(:@ignored) or
+       instance_variable_defined?('@ignored') then
+      return false
+    elsif missing_extensions? then
+      @ignored = true
+
+      warn "Ignoring #{full_name} because its extensions are not built.  " +
+           "Try: gem pristine #{full_name}"
+      return false
+    end
 
     suffixes = Gem.suffixes
 
@@ -204,6 +218,24 @@ class Gem::BasicSpecification
                 Gem.extension_api_version, full_name
 
     [relative_extension_dir].concat @require_paths
+  end
+
+  ##
+  # Returns the paths to the source files for use with analysis and
+  # documentation tools.  These paths are relative to full_gem_path.
+
+  def source_paths
+    paths = raw_require_paths.dup
+
+    if @extensions then
+      ext_dirs = @extensions.map do |extension|
+        extension.split(File::SEPARATOR, 2).first
+      end.uniq
+
+      paths.concat ext_dirs
+    end
+
+    paths.uniq
   end
 
   ##

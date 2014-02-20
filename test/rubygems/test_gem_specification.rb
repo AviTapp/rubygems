@@ -1332,22 +1332,14 @@ dependencies: []
   def test_contains_requirable_file_eh_extension
     ext_spec
 
-    extconf_rb = File.join @ext.gem_dir, @ext.extensions.first
-    FileUtils.mkdir_p File.dirname extconf_rb
-
-    open extconf_rb, 'w' do |f|
-      f.write <<-'RUBY'
-        open 'Makefile', 'w' do |f|
-          f.puts "clean:\n\techo cleaned"
-          f.puts "default:\n\techo built"
-          f.puts "install:\n\techo installed"
-        end
-      RUBY
+    _, err = capture_io do
+      refute @ext.contains_requirable_file? 'nonexistent'
     end
 
-    refute @ext.contains_requirable_file? 'nonexistent'
+    expected = "Ignoring ext-1 because its extensions are not built.  " +
+               "Try: gem pristine ext-1\n"
 
-    assert_path_exists @ext.extension_dir
+    assert_equal expected, err
   end
 
   def test_date
@@ -1789,24 +1781,37 @@ dependencies: []
   end
 
   def test_require_paths
-    enable_shared, RbConfig::CONFIG['ENABLE_SHARED'] =
-      RbConfig::CONFIG['ENABLE_SHARED'], 'no'
+    enable_shared 'no' do
+      ext_spec
 
-    ext_spec
+      @ext.require_path = 'lib'
 
-    @ext.require_path = 'lib'
+      ext_install_dir = Pathname(@ext.extension_dir)
+      full_gem_path = Pathname(@ext.full_gem_path)
+      relative_install_dir = ext_install_dir.relative_path_from full_gem_path
 
-    ext_install_dir = Pathname(@ext.extension_dir)
-    full_gem_path = Pathname(@ext.full_gem_path)
-    relative_install_dir = ext_install_dir.relative_path_from full_gem_path
-
-    assert_equal [relative_install_dir.to_s, 'lib'], @ext.require_paths
-  ensure
-    RbConfig::CONFIG['ENABLE_SHARED'] = enable_shared
+      assert_equal [relative_install_dir.to_s, 'lib'], @ext.require_paths
+    end
   end
 
   def test_source
     assert_kind_of Gem::Source::Installed, @a1.source
+  end
+
+  def test_source_paths
+    ext_spec
+
+    @ext.require_paths = %w[lib ext foo]
+    @ext.extensions << 'bar/baz'
+
+    expected = %w[
+      lib
+      ext
+      foo
+      bar
+    ]
+
+    assert_equal expected, @ext.source_paths
   end
 
   def test_full_require_paths
@@ -2862,6 +2867,52 @@ end
     assert_equal @m1.to_ruby, valid_ruby_spec
   end
 
+  def test_missing_extensions_eh
+    ext_spec
+
+    assert @ext.missing_extensions?
+
+    extconf_rb = File.join @ext.gem_dir, @ext.extensions.first
+    FileUtils.mkdir_p File.dirname extconf_rb
+
+    open extconf_rb, 'w' do |f|
+      f.write <<-'RUBY'
+        open 'Makefile', 'w' do |f|
+          f.puts "clean:\n\techo clean"
+          f.puts "default:\n\techo built"
+          f.puts "install:\n\techo installed"
+        end
+      RUBY
+    end
+
+    @ext.build_extensions
+
+    refute @ext.missing_extensions?
+  end
+
+  def test_missing_extensions_eh_default_gem
+    spec = new_default_spec 'default', 1
+    spec.extensions << 'extconf.rb'
+
+    refute spec.missing_extensions?
+  end
+
+  def test_missing_extensions_eh_legacy
+    ext_spec
+
+    @ext.installed_by_version = v '2.2.0.preview.2'
+
+    assert @ext.missing_extensions?
+
+    @ext.installed_by_version = v '2.2.0.preview.1'
+
+    refute @ext.missing_extensions?
+  end
+
+  def test_missing_extensions_eh_none
+    refute @a1.missing_extensions?
+  end
+
   def test_find_by_name
     util_make_gems
     assert(Gem::Specification.find_by_name("a"))
@@ -2935,9 +2986,9 @@ end
 
   def with_syck
     begin
+      verbose, $VERBOSE = $VERBOSE, nil
       require "yaml"
       old_engine = YAML::ENGINE.yamler
-      verbose, $VERBOSE = $VERBOSE, nil
       YAML::ENGINE.yamler = 'syck'
       load 'rubygems/syck_hack.rb'
     rescue NameError

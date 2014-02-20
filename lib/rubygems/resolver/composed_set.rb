@@ -16,7 +16,22 @@ class Gem::Resolver::ComposedSet < Gem::Resolver::Set
   # Gem::Resolver::compose_sets instead.
 
   def initialize *sets
+    super()
+
     @sets = sets
+  end
+
+  ##
+  # Sets the remote network access for all composed sets.
+
+  def remote= remote
+    super
+
+    @sets.each { |set| set.remote = remote }
+  end
+
+  def errors
+    @errors + @sets.map { |set| set.errors }.flatten
   end
 
   ##

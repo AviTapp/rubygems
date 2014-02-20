@@ -74,7 +74,7 @@ class Gem::Dependency
   end
 
   def inspect # :nodoc:
-    if @prerelease
+    if prerelease? then
       "<%s type=%p name=%p requirements=%p prerelease=ok>" %
         [self.class, self.type, self.name, requirement.to_s]
     else
@@ -145,7 +145,6 @@ class Gem::Dependency
     @requirement = @version_requirements if defined?(@version_requirements)
   end
 
-  # DOC: this method needs documentation or :nodoc''d
   def requirements_list
     requirement.as_list
   end
@@ -205,8 +204,6 @@ class Gem::Dependency
 
   alias === =~
 
-  # DOC: this method needs either documented or :nodoc'd
-
   def match? obj, version=nil
     if !version
       name = obj.name
@@ -216,12 +213,14 @@ class Gem::Dependency
     end
 
     return false unless self.name === name
-    return true if requirement.none?
 
-    requirement.satisfied_by? Gem::Version.new(version)
+    version = Gem::Version.new version
+
+    return true if requirement.none? and not version.prerelease?
+    return false if version.prerelease? and not prerelease?
+
+    requirement.satisfied_by? version
   end
-
-  # DOC: this method needs either documented or :nodoc'd
 
   def matches_spec? spec
     return false unless name === spec.name
@@ -249,8 +248,6 @@ class Gem::Dependency
     self.class.new name, self_req.as_list.concat(other_req.as_list)
   end
 
-  # DOC: this method needs either documented or :nodoc'd
-
   def matching_specs platform_only = false
     matches = Gem::Specification.stubs.find_all { |spec|
       self.name === spec.name and # TODO: == instead of ===
@@ -272,8 +269,6 @@ class Gem::Dependency
   def specific?
     @requirement.specific?
   end
-
-  # DOC: this method needs either documented or :nodoc'd
 
   def to_specs
     matches = matching_specs true
@@ -302,8 +297,6 @@ class Gem::Dependency
 
     matches
   end
-
-  # DOC: this method needs either documented or :nodoc'd
 
   def to_spec
     matches = self.to_specs

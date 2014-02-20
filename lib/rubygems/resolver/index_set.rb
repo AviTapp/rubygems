@@ -5,6 +5,8 @@
 class Gem::Resolver::IndexSet < Gem::Resolver::Set
 
   def initialize source = nil # :nodoc:
+    super()
+
     @f =
       if source then
         sources = Gem::SourceList.from [source]
@@ -16,7 +18,9 @@ class Gem::Resolver::IndexSet < Gem::Resolver::Set
 
     @all = Hash.new { |h,k| h[k] = [] }
 
-    list, = @f.available_specs :released
+    list, errors = @f.available_specs :complete
+
+    @errors.concat errors
 
     list.each do |uri, specs|
       specs.each do |n|
@@ -33,6 +37,8 @@ class Gem::Resolver::IndexSet < Gem::Resolver::Set
 
   def find_all req
     res = []
+
+    return res unless @remote
 
     name = req.dependency.name
 

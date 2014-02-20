@@ -81,7 +81,10 @@ lib/rubygems/mock_gem_ui.rb
 lib/rubygems/name_tuple.rb
 lib/rubygems/package.rb
 lib/rubygems/package/digest_io.rb
+lib/rubygems/package/file_source.rb
+lib/rubygems/package/io_source.rb
 lib/rubygems/package/old.rb
+lib/rubygems/package/source.rb
 lib/rubygems/package/tar_header.rb
 lib/rubygems/package/tar_reader.rb
 lib/rubygems/package/tar_reader/entry.rb
@@ -288,6 +291,7 @@ test/rubygems/test_gem_resolver_activation_request.rb
 test/rubygems/test_gem_resolver_api_set.rb
 test/rubygems/test_gem_resolver_api_specification.rb
 test/rubygems/test_gem_resolver_best_set.rb
+test/rubygems/test_gem_resolver_composed_set.rb
 test/rubygems/test_gem_resolver_conflict.rb
 test/rubygems/test_gem_resolver_dependency_request.rb
 test/rubygems/test_gem_resolver_git_set.rb
@@ -324,6 +328,7 @@ test/rubygems/test_gem_stream_ui.rb
 test/rubygems/test_gem_stub_specification.rb
 test/rubygems/test_gem_text.rb
 test/rubygems/test_gem_uninstaller.rb
+test/rubygems/test_gem_unsatisfiable_dependency_error.rb
 test/rubygems/test_gem_uri_formatter.rb
 test/rubygems/test_gem_util.rb
 test/rubygems/test_gem_validator.rb

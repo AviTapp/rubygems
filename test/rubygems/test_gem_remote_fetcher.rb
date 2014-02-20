@@ -208,15 +208,15 @@ gems:
     fetcher.instance_variable_set :@test_data, data
 
     unless blow then
-      def fetcher.fetch_path arg
+      def fetcher.fetch_path arg, *rest
         @test_arg = arg
         @test_data
       end
     else
-      def fetcher.fetch_path arg
+      def fetcher.fetch_path arg, *rest
         # OMG I'm such an ass
         class << self; remove_method :fetch_path; end
-        def self.fetch_path arg
+        def self.fetch_path arg, *rest
           @test_arg = arg
           @test_data
         end
@@ -239,6 +239,36 @@ gems:
     a1_cache_gem = @a1.cache_file
     assert_equal a1_cache_gem, fetcher.download(@a1, 'http://gems.example.com')
     assert_equal("http://gems.example.com/gems/a-1.gem",
+                 fetcher.instance_variable_get(:@test_arg).to_s)
+    assert File.exist?(a1_cache_gem)
+  end
+
+  def test_download_with_auth
+    a1_data = nil
+    File.open @a1_gem, 'rb' do |fp|
+      a1_data = fp.read
+    end
+
+    fetcher = util_fuck_with_fetcher a1_data
+
+    a1_cache_gem = @a1.cache_file
+    assert_equal a1_cache_gem, fetcher.download(@a1, 'http://user:password@gems.example.com')
+    assert_equal("http://user:password@gems.example.com/gems/a-1.gem",
+                 fetcher.instance_variable_get(:@test_arg).to_s)
+    assert File.exist?(a1_cache_gem)
+  end
+
+  def test_download_with_encoded_auth
+    a1_data = nil
+    File.open @a1_gem, 'rb' do |fp|
+      a1_data = fp.read
+    end
+
+    fetcher = util_fuck_with_fetcher a1_data
+
+    a1_cache_gem = @a1.cache_file
+    assert_equal a1_cache_gem, fetcher.download(@a1, 'http://user:%25pas%25sword@gems.example.com')
+    assert_equal("http://user:%25pas%25sword@gems.example.com/gems/a-1.gem",
                  fetcher.instance_variable_get(:@test_arg).to_s)
     assert File.exist?(a1_cache_gem)
   end

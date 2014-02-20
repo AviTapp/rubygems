@@ -21,19 +21,66 @@ class Gem::Resolver::InstallerSet < Gem::Resolver::Set
   attr_accessor :ignore_installed # :nodoc:
 
   ##
+  # The remote_set looks up remote gems for installation.
+
+  attr_reader :remote_set # :nodoc:
+
+  ##
   # Creates a new InstallerSet that will look for gems in +domain+.
 
   def initialize domain
+    super()
+
     @domain = domain
+    @remote = consider_remote?
 
     @f = Gem::SpecFetcher.fetcher
 
-    @all = Hash.new { |h,k| h[k] = [] }
     @always_install      = []
     @ignore_dependencies = false
     @ignore_installed    = false
-    @loaded_remote_specs = []
+    @local               = {}
+    @remote_set          = Gem::Resolver::BestSet.new
     @specs               = {}
+  end
+
+  ##
+  # Looks up the latest specification for +dependency+ and adds it to the
+  # always_install list.
+
+  def add_always_install dependency
+    request = Gem::Resolver::DependencyRequest.new dependency, nil
+
+    found = find_all request
+
+    found.delete_if { |s| s.version.prerelease? } unless dependency.prerelease?
+
+    found = found.select do |s|
+      Gem::Source::SpecificFile === s.source or
+        Gem::Platform::RUBY == s.platform or
+        Gem::Platform.local === s.platform
+    end
+
+    if found.empty? then
+      exc = Gem::UnsatisfiableDependencyError.new request
+      exc.errors = errors
+
+      raise exc
+    end
+
+    newest = found.max_by do |s|
+      [s.version, s.platform == Gem::Platform::RUBY ? -1 : 1]
+    end
+
+    @always_install << newest.spec
+  end
+
+  ##
+  # Adds a local gem requested using +dep_name+ with the given +spec+ that can
+  # be loaded and installed using the +source+.
+
+  def add_local dep_name, spec, source
+    @local[dep_name] = [spec, source]
   end
 
   ##
@@ -51,6 +98,13 @@ class Gem::Resolver::InstallerSet < Gem::Resolver::Set
   end
 
   ##
+  # Errors encountered while resolving gems
+
+  def errors
+    @errors + @remote_set.errors
+  end
+
+  ##
   # Returns an array of IndexSpecification objects matching DependencyRequest
   # +req+.
 
@@ -65,12 +119,20 @@ class Gem::Resolver::InstallerSet < Gem::Resolver::Set
     name = dep.name
 
     dep.matching_specs.each do |gemspec|
-      next if @always_install.include? gemspec
+      next if @always_install.any? { |spec| spec.name == gemspec.name }
 
       res << Gem::Resolver::InstalledSpecification.new(self, gemspec)
     end unless @ignore_installed
 
     if consider_local? then
+      matching_local = @local.values.select do |spec, _|
+        req.matches_spec? spec
+      end.map do |spec, source|
+        Gem::Resolver::LocalSpecification.new self, spec, source
+      end
+
+      res.concat matching_local
+
       local_source = Gem::Source::Local.new
 
       if spec = local_source.find_gem(name, dep.requirement) then
@@ -79,18 +141,13 @@ class Gem::Resolver::InstallerSet < Gem::Resolver::Set
       end
     end
 
-    if consider_remote? then
-      load_remote_specs dep
-
-      @all[name].each do |remote_source, n|
-        if dep.match? n then
-          res << Gem::Resolver::IndexSpecification.new(
-            self, n.name, n.version, remote_source, n.platform)
-        end
-      end
-    end
+    res.concat @remote_set.find_all req if consider_remote?
 
     res
+  end
+
+  def prefetch(reqs)
+    @remote_set.prefetch(reqs)
   end
 
   def inspect # :nodoc:
@@ -99,27 +156,6 @@ class Gem::Resolver::InstallerSet < Gem::Resolver::Set
     '#<%s domain: %s specs: %p always install: %p>' % [
       self.class, @domain, @specs.keys, always_install,
     ]
-  end
-
-  ##
-  # Loads remote prerelease specs if +dep+ is a prerelease dependency
-
-  def load_remote_specs dep # :nodoc:
-    types = [:released]
-    types << :prerelease if dep.prerelease?
-
-    types.each do |type|
-      next if @loaded_remote_specs.include? type
-      @loaded_remote_specs << type
-
-      list, = @f.available_specs type
-
-      list.each do |uri, specs|
-        specs.each do |n|
-          @all[n.name] << [uri, n]
-        end
-      end
-    end
   end
 
   ##
@@ -136,6 +172,15 @@ class Gem::Resolver::InstallerSet < Gem::Resolver::Set
     end
   end
 
+  ##
+  # Has a local gem for +dep_name+ been added to this set?
+
+  def local? dep_name # :nodoc:
+    spec, = @local[dep_name]
+
+    spec
+  end
+
   def pretty_print q # :nodoc:
     q.group 2, '[InstallerSet', ']' do
       q.breakable
@@ -148,6 +193,17 @@ class Gem::Resolver::InstallerSet < Gem::Resolver::Set
       q.breakable
       q.text 'always install: '
       q.pp @always_install
+    end
+  end
+
+  def remote= remote # :nodoc:
+    case @domain
+    when :local then
+      @domain = :both if remote
+    when :remote then
+      @domain = nil unless remote
+    when :both then
+      @domain = :local unless remote
     end
   end
 
